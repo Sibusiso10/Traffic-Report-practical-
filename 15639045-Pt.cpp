@@ -6,6 +6,7 @@
 #include <sstream>
 #include <vector>
 #include <iomanip>
+#include <stdexcept>
 
 //Class TrafficInformation, will be the main class to deal with all data handling and outputting summaries for data read from the files. 
 //The reason for using a class for this project is to make it reuseable, and by creating a variable of type "TrafficInformation", you can pass in just the location of the 
@@ -45,6 +46,84 @@ struct TrafficCollectionType{ //Data structure to collect the traffic data into 
     std::string type; 
     int speed; 
 }; 
+
+
+struct PeakData{  //Data structure to collect the Peak traffic hours, can store the hour interval the start and end of the invterval and the number if vehicles in that interval. 
+    int firstHour; 
+    int endHour; 
+    int numOfVehiclesPerHour;
+};
+
+
+class PeakTrafficTimesReport{
+    public: 
+        PeakTrafficTimesReport(const std::string date, const int startHour):firstDate(date), dateCount(0), intervalPerHourCount(0) {
+
+            // Initialize the outer vector with 1 element (day or date), and initialize the inner vector
+            trafficPeakData.push_back(std::vector<PeakData>(1));
+
+            // Now, you can assign values to the first element of the inner vector
+            trafficPeakData[0][0].firstHour = startHour;
+            trafficPeakData[0][0].endHour = startHour + 1; // Example value for end hour
+            trafficPeakData[0][0].numOfVehiclesPerHour = 1; // Initialize with 0 vehicles
+        }
+        void setFirstDate(const std::string date){
+            firstDate = date; 
+        }
+
+        void setInterval(const int hour){
+            trafficPeakData[dateCount][intervalPerHourCount].firstHour = hour; 
+            trafficPeakData[dateCount][intervalPerHourCount].endHour = hour + 1; 
+        }
+        void setPeakData(const std::string currentDate,const int currentHour){
+            if(firstDate == currentDate){
+                // If within the current hour interval, increase the vehicle count
+                if(trafficPeakData[dateCount][intervalPerHourCount].endHour > currentHour){
+                    trafficPeakData[dateCount][intervalPerHourCount].numOfVehiclesPerHour ++; 
+                }
+                // If outside the current hour interval, create a new interval
+                else if(trafficPeakData[dateCount][intervalPerHourCount].endHour <= currentHour){ 
+                    intervalPerHourCount ++; 
+                    PeakData tempPeakData; 
+                    tempPeakData.firstHour = currentHour; 
+                    tempPeakData.endHour = currentHour + 1; 
+                    tempPeakData.numOfVehiclesPerHour = 1; 
+                    trafficPeakData[dateCount].push_back(tempPeakData);  // Add new interval
+                }
+            }
+            else{
+                // New date, reset interval count and create new entry
+                intervalPerHourCount = 0; 
+                dateCount++; 
+                firstDate = currentDate; 
+                std::vector<PeakData> templist;
+                // Initialize the new day with its first interval
+                PeakData tempPeakData; 
+                tempPeakData.firstHour = currentHour; 
+                tempPeakData.endHour = currentHour + 1; 
+                tempPeakData.numOfVehiclesPerHour = 1;
+
+                templist.push_back(tempPeakData); 
+                trafficPeakData.push_back(templist);  // Add new day to trafficPeakData
+            }
+        }
+
+        void displayPeakData() const{
+            for (const auto& dayData : trafficPeakData) {   // Iterate over each day
+                for (const auto& peak : dayData) {          // Iterate over each hour interval
+                    std::cout << "First Hour: " << peak.firstHour 
+                            << "\t, End Hour: " << peak.endHour 
+                            << "\t, Vehicles: " << peak.numOfVehiclesPerHour << std::endl;
+                }
+            }
+        }
+    private: 
+        std::string firstDate; 
+        int dateCount; 
+        int intervalPerHourCount; 
+        std::vector<std::vector<PeakData>> trafficPeakData;
+};
+
 
 class SpeedAnalysisReport{
     public: 
@@ -101,6 +180,9 @@ class SpeedAnalysisReport{
         int numOfFast; 
         int imposibleSpeed;  
 };
+
+
+
 
 
 class TrafficSummaryReport {
@@ -213,16 +295,22 @@ class TrafficInformation
             outFile >> date >> timeVehicleSpeed; 
             trafficSamReport = TrafficSummaryReport(date); // Declearing TrafficSummaryReport variable
             
-
+            
             std::stringstream sep(timeVehicleSpeed);
                 std::getline(sep, time, ';');
                 std::getline(sep, vehicle, ';');
                 std::getline(sep, speed, ';');
 
-            SpeedAnaReport.setTotalSpeed(std::stoi(speed)); 
-            SpeedAnaReport.speedOrganizer(std::stoi(speed)); 
+            speedAnaReport.setTotalSpeed(std::stoi(speed)); 
+            speedAnaReport.speedOrganizer(std::stoi(speed)); 
 
             trafficSamReport.vehicleCount(vehicle); // Passing the first vehicle for recording
+
+            std::stringstream theTime(time);
+            std::getline(theTime, hours, ':');
+            std::getline(theTime, minutes, ':');
+
+            peakTrafficTimesReport = PeakTrafficTimesReport(date, std::stoi(hours)); 
 
             while(outFile >> date >> timeVehicleSpeed){ 
 
@@ -244,22 +332,26 @@ class TrafficInformation
                 trafficSamReport.recordNumOfVehiclesPerDay(data.date); // Record the traffic data
                 trafficSamReport.vehicleCount(data.type);
                 
-                SpeedAnaReport.setTotalSpeed(data.speed);
-                SpeedAnaReport.speedOrganizer(data.speed); 
+                speedAnaReport.setTotalSpeed(data.speed);
+                speedAnaReport.speedOrganizer(data.speed); 
 
+                peakTrafficTimesReport.setPeakData(data.date, std::stoi(hours));
             }
 
             outFile.close();  // Close the file
 
             trafficSamReport.displayTrafficSummaryReport();  // Display summary
             std::cout<<"\n\n\n"; 
-            SpeedAnaReport.displaySpeedAnalysisReport(trafficSamReport.getTotalNumOfVehicles()); 
+            speedAnaReport.displaySpeedAnalysisReport(trafficSamReport.getTotalNumOfVehicles()); 
+            std::cout<<"\n\n\n"; 
+            peakTrafficTimesReport.displayPeakData(); 
 
         }; //This member function is responsible for reading the traffic data. 
     private:
         std::string fileLocation;  //member variable for storing the files LocationName as one string. 
         TrafficSummaryReport trafficSamReport{" "};
-        SpeedAnalysisReport SpeedAnaReport; 
+        SpeedAnalysisReport speedAnaReport; 
+        PeakTrafficTimesReport peakTrafficTimesReport;
 };
 
 
@@ -273,24 +365,3 @@ int main(){
 
     return 0; 
 }
-
-
-
-/*   if("CAR" == data.type){
-    numOfCars++; 
-}
-else if("BUS" == data.type){
-    numOfBuses++; 
-}
-else if("MOTORCYCLE" == data.type){
-    numOfMotorBikes++
-}*/
-
-/*
-std::cout<<"Date: "<<data.date 
-        << "\ttime, Hour: "<<data.time.getHour() 
-        <<" Minutes : "<< data.time.getMinutes() 
-        << "\t\tVehicle: "<<data.type
-        << " \t\t\tSpeed: "<<data.speed
-        <<"\n"; 
-*/
